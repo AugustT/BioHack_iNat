@@ -27,6 +27,8 @@ library(sf)
 
 #library(ggplot2)
 
+library(stringr)
+
 ```
 
 ## Get data
@@ -109,6 +111,7 @@ all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",l
 Format data ready for recorderMetrics
 
 ```{r}
+#see what columns we have to play with
 all_observations_raw %>% str()
 
 #get columns and rename
@@ -116,11 +119,14 @@ all_observations <- all_observations_raw %>%
   select(id = id,
          recorder = user_login,
          species = scientific_name,
-         date = datetime,
+         date = observed_on,
          long = longitude,
-         lat = latitude) %>%
-  mutate(date = as.Date(date)) %>%
-  filter(!is.na(long))
+         lat = latitude,
+         quality_grade = quality_grade) %>%
+  mutate(species_level = F,date = as.Date(date)) %>%
+  filter(!is.na(long),!is.na(lat),!is.na(date)) #remove observations without locaton or date
+
+all_observations$species_level[str_detect(all_observations$species, " ")] <- T
 
 #quick look at the data
 all_observations %>% str()
@@ -137,7 +143,7 @@ spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
   round(-3) # not rounding down
 
 #add the column to the data frame
-all_observations$km_sq <- paste0(coordinates[,1],",",coordinates[,2])
+all_observations$km_sq <- paste0(spdf[,1],",",spdf[,2])
 
 write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv")
 ```
@@ -148,16 +154,17 @@ write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draf
 
 ```{r}
 
-metrics_axes <- predictAxes(data = all_observations,
-                            recorders  = unique(cit_sci_data$recorder)[1:10])
+all_observations <- read.csv("2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv")
 
-
-
-
+#not sure if this works
+# metrics_axes <- predictAxes(data = all_observations,
+#                             recorders  = unique(all_observations$recorder)[1:3])
+# 
+# str(metrics_axes)
 ```
 
 
-
+### do stuff
 
 
 
