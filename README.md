@@ -2,6 +2,10 @@
 Biohackaton 2021 - Team investigating recorder behaviour on iNaturalist
 
 - [BioHack_iNat](#biohack_inat)
+  - [Getting metrics for the mean Spanish plant collector](#getting-metrics-for-the-mean-spanish-plant-collector)
+    - [Building a list of observers](#building-a-list-of-observers)
+    - [Getting all inat observations for these users](#getting-all-inat-observations-for-these-users)
+    - [Calculating metrics](#calculating-metrics)
 
 ## Getting metrics for the mean Spanish plant collector
 
