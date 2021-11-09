@@ -20,6 +20,9 @@ library(recorderMetrics)
 library(dplyr)
 library(purrr)
 
+library(httr)
+library(jsonlite)
+
 ```
 
 ## Get data
@@ -28,6 +31,29 @@ library(purrr)
 
 
 Provide information about how we download the data
+
+Turn users into usernames
+
+```{r}
+#load users
+recorded_by <- readLines("Getting_Random_Observers/data/spain_100obs_observers_2021-11-09_12-03.txt")
+
+for (i in 1:length(recorded_by)){
+  res = GET("https://api.inaturalist.org/v1/users/autocomplete",
+    query = list(q = recorded_by[i]))
+  
+  data = fromJSON(rawToChar(res$content))
+  
+  if (nrow(data$results)>1) {
+    print("multiple matches")
+  } else if (nrow(data$results)==1) {
+    print("one match, good!")
+  } else {
+    "no matchs :("
+  }
+}
+
+```
 
 
 
@@ -75,7 +101,8 @@ all_observations %>% str()
 
 ```{r}
 
-
+metrics_axes <- predictAxes(data = all_observations,
+                            recorders  = unique(cit_sci_data$recorder)[1:10])
 
 
 
