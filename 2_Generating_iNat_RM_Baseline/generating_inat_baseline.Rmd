@@ -25,6 +25,8 @@ library(jsonlite)
 
 library(sf)
 
+#library(ggplot2)
+
 ```
 
 ## Get data
@@ -73,10 +75,24 @@ Do get calls for each user
 ```{r}
 usernames <- readRDS("2_Generating_iNat_RM_Baseline/data/usernames.rds")
 for (i in 120:length(usernames)){
-  print(i)
-  user_observations <- get_inat_obs_user(usernames[i],maxresults = 5000)
+  
+  #OLD VERSION using rinat package
+  # print(i)
+  # user_observations <- get_inat_obs_user(usernames[i],maxresults = 5000)
+  # saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
+  # Sys.sleep(1)
+  
+  #new approach using: https://api.inaturalist.org/v1/docs/#!/Observations/get_observations
+  res = GET("https://api.inaturalist.org/v1/observations",
+    query = list(user_id = recorded_by[i],
+                 per_page = 190,
+                 taxon_id = 47126,
+                 search_on = "place",
+                 q = "Spain"))
+  
+  data = fromJSON(rawToChar(res$content))
+  data$results
   saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
-  Sys.sleep(1)
   
 }
 ```
@@ -97,28 +113,33 @@ all_observations_raw %>% str()
 
 #get columns and rename
 all_observations <- all_observations_raw %>% 
-  select(recorder = user_login,
+  select(id = id,
+         recorder = user_login,
          species = scientific_name,
          date = datetime,
          long = longitude,
          lat = latitude) %>%
   mutate(date = as.Date(date)) %>%
-  filter(!is.na(long),)
+  filter(!is.na(long))
 
 #quick look at the data
 all_observations %>% str()
 
-write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv")
-
-# generate: km_sq
-
+# generate: km_sq by projecting to spanish national grid
 xy <- all_observations %>% select(lat,long)
 
+#make into spatial data frame, convert to sf, transform to spanish grid, get coordinates and round to nearest 1000
 spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
-                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")) %>% 
+  st_as_sf() %>% 
+  st_transform(spdf,crs = 2062) %>% 
+  st_coordinates() %>% 
+  round(-3) # not rounding down
 
+#add the column to the data frame
+all_observations$km_sq <- paste0(coordinates[,1],",",coordinates[,2])
 
-
+write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv")
 ```
 
 ## Metric-ify
