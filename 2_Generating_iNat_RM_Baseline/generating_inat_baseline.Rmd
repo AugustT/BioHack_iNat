@@ -23,6 +23,8 @@ library(purrr)
 library(httr)
 library(jsonlite)
 
+library(sf)
+
 ```
 
 ## Get data
@@ -70,16 +72,19 @@ Do get calls for each user
 
 ```{r}
 usernames <- readRDS("2_Generating_iNat_RM_Baseline/data/usernames.rds")
-for (i in 1:length(usernames)){
+for (i in 120:length(usernames)){
+  print(i)
   user_observations <- get_inat_obs_user(usernames[i],maxresults = 5000)
   saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
+  Sys.sleep(1)
+  
 }
 ```
 
 Combine into one dataframe
 
 ```{r}
-all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",list.files(path = "data/", pattern = ".rds")) %>%
+all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",list.files(path = "2_Generating_iNat_RM_Baseline/data/user_obvs", pattern = ".rds")) %>%
   map(readRDS) %>% 
   bind_rows()
 
@@ -97,12 +102,22 @@ all_observations <- all_observations_raw %>%
          date = datetime,
          long = longitude,
          lat = latitude) %>%
-  mutate(date = as.Date(date))
+  mutate(date = as.Date(date)) %>%
+  filter(!is.na(long),)
 
-
-
-
+#quick look at the data
 all_observations %>% str()
+
+write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv")
+
+# generate: km_sq
+
+xy <- all_observations %>% select(lat,long)
+
+spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+
+
 
 ```
 
