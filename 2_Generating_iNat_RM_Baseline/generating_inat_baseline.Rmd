@@ -38,6 +38,8 @@ Turn users into usernames
 #load users
 recorded_by <- readLines("Getting_Random_Observers/data/spain_100obs_observers_2021-11-09_12-03.txt")
 
+usernames <- c()
+
 for (i in 1:length(recorded_by)){
   res = GET("https://api.inaturalist.org/v1/users/autocomplete",
     query = list(q = recorded_by[i]))
@@ -45,13 +47,18 @@ for (i in 1:length(recorded_by)){
   data = fromJSON(rawToChar(res$content))
   
   if (nrow(data$results)>1) {
-    print("multiple matches")
+    print("multiple matches :S")
   } else if (nrow(data$results)==1) {
-    print("one match, good!")
+    print("one match good! :D")
+    username <- data$results$login
+    usernames <- append(usernames,username)
   } else {
-    "no matchs :("
+    "no matches :("
   }
+  Sys.sleep(1)
 }
+
+saveRDS(usernames,"2_Generating_iNat_RM_Baseline/data/usernames.rds")
 
 ```
 
@@ -59,20 +66,20 @@ for (i in 1:length(recorded_by)){
 
 ### Get observations for users
 
-Do get calls
+Do get calls for each user
 
 ```{r}
-usernames <- c("simonrolph")
+usernames <- readRDS("2_Generating_iNat_RM_Baseline/data/usernames.rds")
 for (i in 1:length(usernames)){
   user_observations <- get_inat_obs_user(usernames[i],maxresults = 5000)
-  saveRDS(user_observations,paste0("data/observations_",usernames[i],".rds"))
+  saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
 }
 ```
 
 Combine into one dataframe
 
 ```{r}
-all_observations_raw <- paste0("data/",list.files(path = "data/", pattern = ".rds")) %>%
+all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",list.files(path = "data/", pattern = ".rds")) %>%
   map(readRDS) %>% 
   bind_rows()
 
@@ -83,6 +90,7 @@ Format data ready for recorderMetrics
 ```{r}
 all_observations_raw %>% str()
 
+#get columns and rename
 all_observations <- all_observations_raw %>% 
   select(recorder = user_login,
          species = scientific_name,
@@ -90,6 +98,9 @@ all_observations <- all_observations_raw %>%
          long = longitude,
          lat = latitude) %>%
   mutate(date = as.Date(date))
+
+
+
 
 all_observations %>% str()
 
