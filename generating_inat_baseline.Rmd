@@ -1,0 +1,95 @@
+---
+title: "Generating baseline from iNat data to compare users"
+author: "Biohack team 12"
+date: "09/11/2021"
+output: html_document
+---
+
+
+```{r}
+#devtools::install_github('biologicalrecordscentre/recorderMetrics')
+
+library(rinat)
+
+library(adehabitatHR)
+library(raster)
+library(sp)
+library(rgdal)
+library(recorderMetrics)
+
+library(dplyr)
+library(purrr)
+
+```
+
+## Get data
+
+### Getting a sample of users
+
+
+Provide information about how we download the data
+
+
+
+### Get observations for users
+
+Do get calls
+
+```{r}
+usernames <- c("simonrolph")
+for (i in 1:length(usernames)){
+  user_observations <- get_inat_obs_user(usernames[i],maxresults = 5000)
+  saveRDS(user_observations,paste0("data/observations_",usernames[i],".rds"))
+}
+```
+
+Combine into one dataframe
+
+```{r}
+all_observations_raw <- paste0("data/",list.files(path = "data/", pattern = ".rds")) %>%
+  map(readRDS) %>% 
+  bind_rows()
+
+```
+
+Format data ready for recorderMetrics
+
+```{r}
+all_observations_raw %>% str()
+
+all_observations <- all_observations_raw %>% 
+  select(recorder = user_login,
+         species = scientific_name,
+         date = datetime,
+         long = longitude,
+         lat = latitude) %>%
+  mutate(date = as.Date(date))
+
+all_observations %>% str()
+
+```
+
+## Metric-ify
+
+### Plug into recorder metrics
+
+```{r}
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
