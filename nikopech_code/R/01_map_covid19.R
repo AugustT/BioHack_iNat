@@ -1,12 +1,13 @@
+# Combine iNat data and covid data to get the status of COVID and lockdowns
+# at the time of every record
+# Niko Pechlivanis
 
 rm(list = ls())
 
 # load libraries ----------------------------
 
-
 library(data.table)
 library(stringr)
-
 library(COVID19)
 
 
@@ -129,5 +130,3 @@ fwrite(
     sep = "\t"
     
 )
-
-
