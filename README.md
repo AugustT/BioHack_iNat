@@ -15,7 +15,7 @@ This results in 461 observers meeting this criteria.
 
 ### Getting a data dump from inat
 
-Make a directory called `data` in the main repo directory and use aws command line tool to download data:
+Make a directory called `data` in the main repo directory and use aws command line tool (https://aws.amazon.com/cli/) to download data:
 
 ```
 mkdir data
