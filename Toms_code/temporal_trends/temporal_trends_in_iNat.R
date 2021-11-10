@@ -251,7 +251,58 @@ library(patchwork)
 gr1 / gr2
 
 # Calculate metrics for all users with min ~50 records in each period 
+plot(covid19.data$date, covid19.data$stay_home_restrictions)
+plot(covid19.data$date, covid19.data$workplace_closing)
+plot(covid19.data$date, covid19.data$transport_closing)
 
-# See how they changed
+lockdown_var = "workplace_closing"
+
+who = which(!is.na(covid19.data[[lockdown_var]]) & 
+              covid19.data[[lockdown_var]] > 2)
+
+lockdown.date <- as.Date(na.omit(covid19.data$date[covid19.data[[lockdown_var]] > 2]))
+
+data_lockdown <- data_raw[data_raw$date %in% lockdown.date,]
+data_control <- data_raw[data_raw$date %in% (lockdown.date-366),]
+
+users_lockdown <- sort(table(data_lockdown$recorder))
+users_lockdown <- names(users_lockdown[users_lockdown>20])
+
+users_control <- sort(table(data_control$recorder))
+users_control <- names(users_control[users_control>20])
+
+# users with at least 20 data points in both time periods
+users_of_interest <- users_lockdown[users_lockdown %in% users_control]
+
+
+
 
 # Calculate the metrics ----
+
+# See how they changed
+area_user <- function(user, data){
+  spBehaviour <- spatialBehaviour(recorder_name = user, 
+                                           data = data, 
+                                           y_col = 'lat', 
+                                           x_col = 'long',
+                                           crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
+                                           new_crs = spain_crs, 
+                                           recorder_col = 'recorder')
+  spBehaviour$upper_area
+}
+
+# Get user areas for both time periods
+area_lockdown <- sapply(users_of_interest, FUN = area_user, data = data_lockdown)
+area_control <- sapply(users_of_interest, FUN = area_user, data = data_control)
+
+# Group these is one dataframe
+area_data <- data.frame(area = c(area_lockdown, area_control),
+                        status = c(rep('Lockdown', length(area_lockdown)),
+                                   rep('Control', length(area_control))))
+
+# Create a simple box plot
+ggplot(area_data, aes(x = status, y = area)) + 
+  geom_boxplot()
+
+summary(area_lockdown)
+summary(area_control)
