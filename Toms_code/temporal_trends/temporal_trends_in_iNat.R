@@ -250,6 +250,72 @@ library(patchwork)
 
 gr1 / gr2
 
+
+# new plot ----------------------------------------
+
+
+lockdown_var = "workplace_closing"
+
+who = which(!is.na(covid19.data[[lockdown_var]]) & 
+              covid19.data[[lockdown_var]] != 0)
+
+lockdown_var_data = covid19.data[who, ]
+
+lockdown_var_data = lockdown_var_data[order(lockdown_var_data$date), ]
+
+who = which(diff(lockdown_var_data$workplace_closing) != 0)
+
+lockdown_var_data = lockdown_var_data[c(1, who), ]
+
+lockdown_var_data$week.id = week(lockdown_var_data$date)
+
+lockdown_var_data[[lockdown_var]] = as.character(lockdown_var_data[[lockdown_var]])
+
+lockdown_var_data$xlabel = paste0(
+  str_split(lockdown_var_data$date, "\\-", simplify = TRUE)[,1],
+  "week#", 
+  lockdown_var_data$week.id
+)
+
+lockdown_var_data$xlabel = factor(lockdown_var_data$xlabel, 
+                                  levels = unique(lockdown_var_data$xlabel))
+
+data.covid.period$previous.code = paste0(data.covid.period$year - 1,
+                                    "week#", 
+                                    data.covid.period$week.id)
+
+who = match(data.covid.period$previous.code, data.previous.year$xlabel)
+
+data.covid.period$prop.previous = data.previous.year[who, ]$prop
+
+data.covid.period$prop.diff = data.covid.period$prop - data.covid.period$prop.previous
+
+data.covid.period$reg = "upregulated"
+data.covid.period[which(data.covid.period$prop.diff < 0), ]$reg = "downregulated"
+data.covid.period[which(data.covid.period$prop.diff == 0), ]$reg = "downregulated"
+
+
+
+ggplot(data = data.covid.period) +
+  
+  geom_col(aes(x = xlabel, y = prop.diff, fill = reg)) +
+  
+  geom_vline(data = lockdown_var_data, 
+             aes(xintercept = xlabel, 
+                 color = workplace_closing)) +
+  
+  scale_y_continuous(labels = percent) +
+  
+  theme_minimal() +
+  
+  theme(legend.position = "bottom",
+        
+        axis.text.x = element_text(angle = 90)) +
+  
+  labs(title = "COVID period vs Previous year")
+
+
+
 # Calculate metrics for all users with min ~50 records in each period 
 
 # See how they changed
