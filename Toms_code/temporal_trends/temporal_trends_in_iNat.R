@@ -9,10 +9,7 @@ library(sf)
 library(parallel)
 
 # Load in the data ----
-data_raw <- read.csv('2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv')
-
-# Format the data
-data_raw$date <- as.Date(data_raw$date)
+data_raw <- readRDS(file = '2_Generating_iNat_RM_Baseline/data/observations/draft_data.rds')
 
 # Explore the temporal variation ----
 ggplot(data_raw,
@@ -22,6 +19,17 @@ ggplot(data_raw,
                labels = date_format("%b-%Y"),
                limits = as.Date(c('2017-01-01','2022-01-01'))) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Check spatial distribution
+plot(data_raw$long, data_raw$lat)
+
+# Crop to boundng box of mainland Spain
+data_raw <- data_raw[data_raw$lat > 35.946850084 & 
+                     data_raw$lat < 43.7483377142 & 
+                     data_raw$long > -9.39288367353 & 
+                     data_raw$long < 3.03948408368, ]
+
+plot(data_raw$long, data_raw$lat)
 
 # Define time periods ----
 # I think the way to do this is to look at people yearly
@@ -53,6 +61,10 @@ system.time({
                     dir_out = 'Toms_code/temporal_trends/outputs/',
                     new_crs = spain_crs)
 }) # 20 seconds
+
+# some users cause memory problems
+# I fixed it
+# ahospers <- data_raw[data_raw$recorder == 'ahospers', ]
 
 readRDS(file = 'Toms_code/temporal_trends/outputs/adremix')
 
