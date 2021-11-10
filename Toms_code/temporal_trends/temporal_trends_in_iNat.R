@@ -8,6 +8,11 @@ library(sp)
 library(sf)
 library(parallel)
 
+library(COVID19)
+library(data.table)
+library(lubridate)
+library(stringr)
+
 # Load in the data ----
 data_raw <- readRDS(file = '2_Generating_iNat_RM_Baseline/data/observations/draft_data.rds')
 
@@ -87,15 +92,166 @@ system.time({
 stopCluster(cl)
 
 
-# NIKO - cut this data to two periods:
+# task.1 nikopech - cut this data to two periods -----------------
 
-# Lockdown period in Spain
+# get covid19 data --------------------
 
-# Same period by the year before
+country_var = "ESP" # iso_alpha_3
+
+data_raw = data_raw[order(data_raw$date), ]
+data_raw = setDT(data_raw)
+
+covid19.data = covid19(country = country_var, level = 1)
+covid19.data = setDT(covid19.data)
+
+covid19.data = covid19.data[order(covid19.data$date), ]
+
+# use closing
+
+min.date = min(covid19.data$date, na.rm = TRUE)
+
+max.date = max(covid19.data$date, na.rm = TRUE)
+
+data.covid.period = data_raw[which(data_raw$date >= min.date & 
+                            data_raw$date <= max.date), ]
+
+data.covid.period$week.id = week(data.covid.period$date)
+
+previous.year = data.covid.period$date - years(1)
+
+data.previous.year = data_raw[which(data_raw$date %in% previous.year), ]
+
+data.previous.year$week.id = week(data.previous.year$date)
+
+# clean environment -----------------
+
+rm(min.date, max.date, previous.year)
+
+data.covid.period$year = str_split(data.covid.period$date, "\\-", simplify = TRUE)[,1]
+
+data.covid.period = data.covid.period[, .N, by = .(year, week.id)]
+
+proportion = data.covid.period[, .(N = sum(N)), by = year]
+
+who = match(data.covid.period$year, proportion$year)
+
+data.covid.period$prop = round(data.covid.period$N / proportion[who, ]$N,
+                               digits = 4)
+
+data.previous.year$year = str_split(data.previous.year$date, 
+                                    "\\-", simplify = TRUE)[,1]
+
+data.previous.year = data.previous.year[, .N, by = .(year, week.id)]
+
+
+proportion = data.previous.year[, .(N = sum(N)), by = year]
+
+who = match(data.previous.year$year, proportion$year)
+
+data.previous.year$prop = round(data.previous.year$N / proportion[who, ]$N,
+                               digits = 4)
+
+rm(proportion)
+
+
+data.covid.period$xlabel = paste0(data.covid.period$year, "week#",
+                                  data.covid.period$week.id)
+
+data.covid.period$xlabel = factor(data.covid.period$xlabel, 
+                                  levels = unique(data.covid.period$xlabel))
+
+
+lockdown_var = "workplace_closing"
+
+who = which(!is.na(covid19.data[[lockdown_var]]) & 
+              covid19.data[[lockdown_var]] != 0)
+
+lockdown_var_data = covid19.data[who, ]
+
+lockdown_var_data = lockdown_var_data[, .(date = min(date)), 
+                                      by = `lockdown_var`]
+
+colnames(lockdown_var_data) = c("var", "date")
+
+lockdown_var_data$week.id = week(lockdown_var_data$date)
+
+lockdown_var_data$xlabel = paste0(
+  str_split(lockdown_var_data$date, "\\-", simplify = TRUE)[,1],
+  "week#", 
+  lockdown_var_data$week.id
+)
+
+lockdown_var_data$xlabel = factor(lockdown_var_data$xlabel, 
+                                  levels = unique(lockdown_var_data$xlabel))
+
+lockdown_var_data$var = as.character(lockdown_var_data$var)
+
+gr1 = ggplot(data = data.covid.period, aes(x = xlabel, y = prop)) +
+  
+  geom_col() +
+  
+  geom_vline(data = lockdown_var_data, 
+             aes(xintercept = xlabel, color = var)) +
+  
+  scale_y_continuous(labels = percent,
+                     expand = c(0, 0),
+                     limits = c(0, max(data.covid.period$prop,
+                                      data.previous.year$prop))) +
+  
+  theme_minimal() +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, hjust = 1),
+        
+        axis.title.x = element_blank(),
+        
+        axis.line.y = element_line(),
+        axis.ticks.y = element_line(),
+        
+        panel.grid = element_blank(),
+        
+        legend.position = "top") + 
+  
+  labs(y = "Proportion", color = "First workplace closing",
+       title = "COVID19 pandemic")
+
+
+data.previous.year$xlabel = paste0(data.previous.year$year, "week#",
+                                   data.previous.year$week.id)
+
+data.previous.year$xlabel = factor(data.previous.year$xlabel, 
+                                  levels = unique(data.previous.year$xlabel))
+
+gr2 = ggplot(data = data.previous.year, aes(x = xlabel, y = prop)) +
+  
+  geom_col() +
+  
+  scale_y_continuous(labels = percent,
+                     expand = c(0, 0),
+                     limits = c(0, max(data.covid.period$prop,
+                                       data.previous.year$prop))) +
+  
+  theme_minimal() +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, hjust = 1),
+        
+        panel.grid = element_blank(),
+        
+        axis.line.y = element_line(),
+        axis.ticks.y = element_line(),
+        
+        axis.title.x = element_blank()) + 
+  
+  labs(y = "Proportion", title = "Previous year")
+
+
+library(patchwork)
+
+gr1 / gr2
 
 # Calculate metrics for all users with min ~50 records in each period 
 
 # See how they changed
 
-# Scale to other countries
 # Calculate the metrics ----
