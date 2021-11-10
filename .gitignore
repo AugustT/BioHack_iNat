@@ -38,3 +38,7 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 Getting_Random_Observers/data/0047435-210914110416597.csv
+
+
+# a git ignored data folder
+data/
