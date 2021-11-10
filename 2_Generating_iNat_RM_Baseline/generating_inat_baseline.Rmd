@@ -25,11 +25,17 @@ library(jsonlite)
 
 library(sf)
 
-#library(ggplot2)
+library(ggplot2)
 
 library(stringr)
 
 library(geosphere)
+
+
+library(sp)
+library(rworldmap)
+
+source("2_Generating_iNat_RM_Baseline/coords2country.R")
 
 ```
 
@@ -161,14 +167,13 @@ Combine into one dataframe
 all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",list.files(path = "2_Generating_iNat_RM_Baseline/data/user_obvs", pattern = ".rds")) %>%
   map(readRDS) %>% 
   bind_rows()
-
 ```
 
-Format data ready for recorderMetrics
+Preparing data ready for recorderMetrics
 
 ```{r}
 #see what columns we have to play with
-all_observations_raw %>% str()
+#all_observations_raw %>% str()
 
 #get columns and rename
 all_observations <- all_observations_raw %>% 
@@ -185,7 +190,7 @@ all_observations <- all_observations_raw %>%
 all_observations$species_level[str_detect(all_observations$species, " ")] <- T
 
 #quick look at the data
-all_observations %>% str()
+#all_observations %>% str()
 
 #generating sites
 #option 1: 1km grid squares using spanish national grid
@@ -193,40 +198,54 @@ all_observations %>% str()
 # generate: km_sq by projecting to spanish national grid
 xy <- all_observations %>% select(long,lat)
 
-#make into spatial data frame, convert to sf, transform to spanish grid, get coordinates and round to nearest 1000
+# firstly lets exclude non-spain records that have slipped through the gap
 spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
-                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")) %>% 
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+
+all_observations$country <- coords2country(spdf) %>% as.character() # add coutnry clumn to dataframe
+all_observations <- all_observations %>% filter(country == "Spain",long>-10) # exclude non-spain records (and canary island records by filtering by longitude)
+
+#plot it to make sure it's all in spain
+plot(all_observations$long, all_observations$lat)
+
+#make into spatial data frame, convert to sf, transform to spanish grid, get coordinates and round to nearest 1000
+xy <- all_observations %>% select(long,lat)
+spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+spdf_grids <- spdf %>% 
   st_as_sf() %>% 
   st_transform(spdf,crs = 2062) %>% 
   st_coordinates() %>% 
   round(-3) # rounds to nearest 1000m, not rounding down
 
 #add the column to the data frame
-all_observations$km_sq <- paste0(spdf[,1],",",spdf[,2])
-
-# option 2: clustering
-spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
-                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
-mdist <- distm(spdf) # doesn't work because it wants to make a massive vector
-
-hc <- hclust(as.dist(mdist), method="complete")
-
-# define the distance threshold, in this case 40 m
-d=100
-
-# define clusters based on a tree "height" cutoff "d" and add them to the SpDataFrame
-cutree(hc, h=d)
-
-
-write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draft_data.csv")
-saveRDS(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/draft_data.rds")
+all_observations$km_sq <- paste0(spdf_grids[,1],",",spdf_grids[,2])
 ```
 
-Checking out the data
+An alternative approach for creating 'sites' by clustering - doesn't work yet
 
 ```{r}
-record_count <- all_observations %>% group_by(recorder) %>% summarise(n_records = n())
+if(F){
+  # option 2: clustering
+  spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
+                                 proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+  mdist <- distm(spdf) # doesn't work because it wants to make a massive vector
+  
+  hc <- hclust(as.dist(mdist), method="complete")
+  
+  # define the distance threshold, in this case 40 m
+  d=100
+  
+  # define clusters based on a tree "height" cutoff "d" and add them to the SpDataFrame
+  cutree(hc, h=d)
+}
+```
 
+Save the outputs
+
+```{r}
+write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/baseline_observations_spain_plants.csv")
+saveRDS(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/baseline_observations_spain_plants.rds")
 ```
 
 
@@ -236,22 +255,27 @@ record_count <- all_observations %>% group_by(recorder) %>% summarise(n_records 
 
 ```{r}
 
-all_observations <- readRDS("2_Generating_iNat_RM_Baseline/data/observations/draft_data.rds")
+all_observations <- readRDS("2_Generating_iNat_RM_Baseline/data/observations/baseline_observations_spain_plants.rds")
+
+record_count <- all_observations %>% group_by(recorder) %>% summarise(n_records = n())
 
 #not sure if this works
 metrics_axes <- predictAxes(data = all_observations,
-                            recorders  = unique(all_observations$recorder))
+                            recorders  = unique(all_observations$recorder)[1:100])
 # 
-# str(metrics_axes)
+str(metrics_axes)
+
+#pairwise plot
+ggpairs(data = metrics_axes$axes,columns = 2:ncol(metrics_axes$axes))
 
 
-
-
+#actiity ratio
 ar <- activityRatio(recorder_name = unique(all_observations$recorder)[1],
                    data = all_observations,
                    recorder_col = 'recorder',
                    date_col = 'date')
 
+#list length
 LL <- listLength(data = all_observations,
                  recorder_name = unique(all_observations$recorder)[1],
                  threshold = 10,
