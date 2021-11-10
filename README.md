@@ -11,7 +11,19 @@ The goal is the create metrics for a list of 'mean' observers. We created a gbif
 
 The export is here: GBIF.org (09 November 2021) GBIF Occurrence Download https://doi.org/10.15468/dl.svwnrp 
 
-This results in 461 observers meeting this criteria. 
+This results in 461 observers meeting this criteria.
+
+### Getting a data dump from inat
+
+Make a directory called `data` in the main repo directory and use aws command line tool to download data:
+
+```
+mkdir data
+cd data
+aws s3 cp s3://inaturalist-open-data/observations.csv.gz observations.csv.gz --no-sign-request
+```
+
+The data directory is git ignored so will not be committed/pushed
 
 ### Getting all inat observations for these users
 
