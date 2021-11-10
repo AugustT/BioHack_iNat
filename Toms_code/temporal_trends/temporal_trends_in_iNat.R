@@ -18,12 +18,13 @@ ggplot(data_raw,
   scale_x_date(date_breaks = "1 month", 
                labels = date_format("%b-%Y"),
                limits = as.Date(c('2017-01-01','2022-01-01'))) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        plot.background = element_rect(color = 'white'))
 
-# Check spatial distribution
-plot(data_raw$long, data_raw$lat)
+ggsave(filename = 'Toms_code/tempoal_figure.pdf')
 
 # Crop to boundng box of mainland Spain
+# Simon has cleaned the data so this shouls not be needed anymore
 data_raw <- data_raw[data_raw$lat > 35.946850084 & 
                      data_raw$lat < 43.7483377142 & 
                      data_raw$long > -9.39288367353 & 
@@ -35,7 +36,7 @@ plot(data_raw$long, data_raw$lat)
 # I think the way to do this is to look at people yearly
 spain_crs <- '+proj=lcc +lat_1=40 +lat_0=40 +lon_0=0 +k_0=0.9988085293 +x_0=600000 +y_0=600000 +a=6378298.3 +b=6356657.142669561 +pm=madrid +units=m +no_defs'
 
-# First check it works for all the data
+# First we can create metrics with this data for 1 recorder
 pred_a <- predictAxes(data = na.omit(data_raw),
                       recorders = unique(data_raw$recorder)[1],
                       verbose = TRUE,
@@ -62,32 +63,39 @@ system.time({
                     new_crs = spain_crs)
 }) # 20 seconds
 
-# some users cause memory problems
-# I fixed it
-# ahospers <- data_raw[data_raw$recorder == 'ahospers', ]
 
-readRDS(file = 'Toms_code/temporal_trends/outputs/adremix')
 
 # parallelise this
 n.cores <- detectCores()
 
+# define cluster and export functons and variables
 cl <- makeCluster(n.cores - 1)
 clusterEvalQ(cl, library(recorderMetrics))
 clusterEvalQ(cl, library(sp))
 clusterExport(cl, c("data_raw", "axes_for_one_user", "spain_crs"))
 
+# Run for all recorders in parallel
 system.time({
   parLapplyLB(cl = cl,
-              X = unique(data_raw$recorder)[1:10],
+              X = unique(data_raw$recorder),
               fun = axes_for_one_user, 
               data_raw = data_raw,
               dir_out = 'Toms_code/temporal_trends/outputs/',
               new_crs = spain_crs)
-})
+}) # took ~30min
 
 stopCluster(cl)
 
 
-# Loop through the low level metrics
+# NIKO - cut this data to two periods:
 
+# Lockdown period in Spain
+
+# Same period by the year before
+
+# Calculate metrics for all users with min ~50 records in each period 
+
+# See how they changed
+
+# Scale to other countries
 # Calculate the metrics ----
