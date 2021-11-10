@@ -36,13 +36,15 @@ library(sp)
 library(rworldmap)
 
 source("2_Generating_iNat_RM_Baseline/coords2country.R")
+source("2_Generating_iNat_RM_Baseline/get_inat_obs_user_tweaked.R")
 
+library(sqldf)
+library(readr)
 ```
 
 ## Get data
 
 ### Getting a sample of users
-
 
 Provide information about how we download the data
 
@@ -80,55 +82,7 @@ saveRDS(usernames,"2_Generating_iNat_RM_Baseline/data/usernames.rds")
 
 ### Get observations for users
 
-Do get calls for each user
-
-
-Edit the get_inat_obs_user to be able to query by extra fields
-
-```{r}
-
-get_inat_obs_user_tweaked <- function (username, maxresults = 100,queryextra) 
-{
-    if (!curl::has_internet()) {
-        message("No Internet connection.")
-        return(invisible(NULL))
-    }
-    base_url <- "http://www.inaturalist.org/"
-    if (httr::http_error(base_url)) {
-        message("iNaturalist API is unavailable.")
-        return(invisible(NULL))
-    }
-    q_path <- paste0(username, ".csv")
-    ping_path <- paste0(username, ".json")
-    ping_query <- paste0("&per_page=1&page=1",queryextra)
-    ping <- GET(base_url, path = paste0("observations/", 
-        ping_path), query = ping_query)
-    total_res <- as.numeric(ping$headers$`x-total-entries`)
-    if (total_res == 0) {
-        stop("Your search returned zero results. Perhaps your user does not exist.")
-    }
-    page_query <- paste0("&per_page=200&page=1", queryextra)
-    dat <- GET(base_url, path = paste0("observations/", 
-        q_path), query = page_query)
-    data_out <- read.csv(textConnection(content(dat, as = "text")))
-    if (maxresults > 200) {
-        for (i in 2:ceiling(total_res/200)) {
-            page_query <- paste0("&per_page=200&page=", 
-                i, queryextra)
-            dat <- GET(base_url, path = paste0("observations/", 
-                q_path), query = page_query)
-            data_out <- rbind(data_out, read.csv(textConnection(content(dat, 
-                as = "text"))))
-            Sys.sleep(0.1)
-        }
-    }
-    if (maxresults < dim(data_out)[1]) {
-        data_out <- data_out[1:maxresults, ]
-    }
-    return(data_out)
-}
-
-```
+Option 1: use inaturlist API
 
 ```{r}
 #load usernames from whatever source
@@ -148,18 +102,67 @@ for (i in 1:length(usernames)){
   Sys.sleep(1)
 }
 
-# NOT IN USE:
-#new approach using: https://api.inaturalist.org/v1/docs/#!/Observations/get_observations
-# res = GET("https://api.inaturalist.org/v1/observations",
-#   query = list(user_id = recorded_by[2],
-#                per_page = 5000,
-#                search_on = "place",
-#                q = "Spain"))
-# 
-# data = fromJSON(rawToChar(res$content))
-# data$results %>% nrow()
-# saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
+
 ```
+
+Option 2: use iNat dump
+
+Using: https://stackoverflow.com/questions/15967226/skip-some-rows-in-read-csv-in-r/15967406#15967406
+
+```{r}
+#load usernames from whatever source
+usernames <- readRDS("2_Generating_iNat_RM_Baseline/data/usernames.rds")
+
+#country_code <- "ES" # ISO alpha 2
+
+observations <- read_delim("data_inat/observations.csv", 
+    delim = "\t", escape_double = FALSE, 
+    col_types = cols(observed_on = col_date(format = "%Y-%m-%d")), 
+    trim_ws = TRUE)
+
+
+for (cc in countriesCoarse$ISO_A2){
+  country_code <- cc %>% as.character()
+  print(country_code)
+  country_poly <- countriesCoarse[countriesCoarse$ISO_A2 == country_code,]
+  country_extent <- bbox(country_poly)
+  
+  #do a crop of the extent of the country to lose some data 
+  country_observations <- observations %>% filter(
+    longitude > country_extent["x","min"],
+    longitude < country_extent["x","max"],
+    latitude > country_extent["y","min"],
+    latitude < country_extent["y","max"]
+  )
+  
+  xy <- country_observations %>% select(longitude,latitude)
+  
+  # lets exclude non-spain records that have slipped through the gap
+  spdf <- SpatialPointsDataFrame(coords = xy, data = country_observations,
+                                 proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+  country_observations$country_check <- coords2country(spdf) %>% as.character()
+  
+  country_observations <- country_observations %>% filter(country_check == country_code)
+  
+  #observer record tally
+  user_ids <- country_observations %>% 
+    group_by(observer_id) %>%
+    summarise(nrecords = n()) %>%
+    filter(nrecords>99) %>% 
+    pull(observer_id)
+  
+  #select users that have submitted 100 or more records
+  country_observations_select <- country_observations %>% filter(observer_id %in% user_ids)
+  
+  #save
+  saveRDS(country_observations_select,paste0("2_Generating_iNat_RM_Baseline/data/observations/by_country/observations_",country_code,".rds"))
+}
+
+#remove the big dataframe from memory to save space
+rm(observations)
+
+```
+
 
 Combine into one dataframe
 
