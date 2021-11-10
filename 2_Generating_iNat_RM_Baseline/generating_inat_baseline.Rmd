@@ -209,14 +209,17 @@ all_observations <- all_observations %>% filter(country == "Spain",long>-10) # e
 plot(all_observations$long, all_observations$lat)
 
 #make into spatial data frame, convert to sf, transform to spanish grid, get coordinates and round to nearest 1000
-spdf %>% 
+xy <- all_observations %>% select(long,lat)
+spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
+                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+spdf_grids <- spdf %>% 
   st_as_sf() %>% 
   st_transform(spdf,crs = 2062) %>% 
   st_coordinates() %>% 
   round(-3) # rounds to nearest 1000m, not rounding down
 
 #add the column to the data frame
-all_observations$km_sq <- paste0(spdf[,1],",",spdf[,2])
+all_observations$km_sq <- paste0(spdf_grids[,1],",",spdf_grids[,2])
 ```
 
 An alternative approach for creating 'sites' by clustering - doesn't work yet
@@ -238,6 +241,7 @@ if(F){
 }
 ```
 
+Save the outputs
 
 ```{r}
 write.csv(all_observations,"2_Generating_iNat_RM_Baseline/data/observations/baseline_observations_spain_plants.csv")
