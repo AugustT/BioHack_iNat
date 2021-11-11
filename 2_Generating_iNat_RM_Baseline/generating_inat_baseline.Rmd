@@ -85,23 +85,24 @@ saveRDS(usernames,"2_Generating_iNat_RM_Baseline/data/usernames.rds")
 Option 1: use inaturlist API
 
 ```{r}
-#load usernames from whatever source
-usernames <- readRDS("2_Generating_iNat_RM_Baseline/data/usernames.rds")
-
-for (i in 1:length(usernames)){
-  # using function adapted from rinat package
-  print(i)
-  tryCatch({
-    user_observations <- get_inat_obs_user_tweaked(usernames[i],maxresults = 5000,queryextra = "&taxon_id=47126&place_id=6774")
-    saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
-    },
-    error = function(cond){
-      print(cond)
-    })
+if(F){
+  #load usernames from whatever source
+  usernames <- readRDS("2_Generating_iNat_RM_Baseline/data/usernames.rds")
   
-  Sys.sleep(1)
+  for (i in 1:length(usernames)){
+    # using function adapted from rinat package
+    print(i)
+    tryCatch({
+      user_observations <- get_inat_obs_user_tweaked(usernames[i],maxresults = 5000,queryextra = "&taxon_id=47126&place_id=6774")
+      saveRDS(user_observations,paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/observations_",usernames[i],".rds"))
+      },
+      error = function(cond){
+        print(cond)
+      })
+    
+    Sys.sleep(1)
+  }
 }
-
 
 ```
 
@@ -121,7 +122,7 @@ observations <- read_delim("data_inat/observations.csv",
     trim_ws = TRUE)
 
 
-for (cc in countriesCoarse$ISO_A2){
+for (cc in "ES"){
   country_code <- cc %>% as.character()
   print(country_code)
   country_poly <- countriesCoarse[countriesCoarse$ISO_A2 == country_code,]
@@ -151,6 +152,11 @@ for (cc in countriesCoarse$ISO_A2){
     filter(nrecords>99) %>% 
     pull(observer_id)
   
+  #if over 1000 records then radnomly sample 1000
+  if(length(user_ids)>1000){
+    sample(user_ids,1000,replace = F)
+  }
+  
   #select users that have submitted 100 or more records
   country_observations_select <- country_observations %>% filter(observer_id %in% user_ids)
   
@@ -164,33 +170,70 @@ rm(observations)
 ```
 
 
-Combine into one dataframe
 
-```{r}
-all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",list.files(path = "2_Generating_iNat_RM_Baseline/data/user_obvs", pattern = ".rds")) %>%
-  map(readRDS) %>% 
-  bind_rows()
-```
 
 Preparing data ready for recorderMetrics
 
-```{r}
-#see what columns we have to play with
-#all_observations_raw %>% str()
+Load data from approach 1 (using iNat API)
 
-#get columns and rename
-all_observations <- all_observations_raw %>% 
-  select(id = id,
-         recorder = user_login,
-         species = scientific_name,
-         date = observed_on,
-         long = longitude,
-         lat = latitude,
-         quality_grade = quality_grade) %>%
-  mutate(species_level = F,date = as.Date(date)) %>%
-  filter(!is.na(long),!is.na(lat),!is.na(date)) #remove observations without locaton or date
+```{r}
+if(F){
+  #Combine into one dataframe
+  all_observations_raw <- paste0("2_Generating_iNat_RM_Baseline/data/user_obvs/",list.files(path = "2_Generating_iNat_RM_Baseline/data/user_obvs", pattern = ".rds")) %>%
+    map(readRDS) %>% 
+    bind_rows()
+  #see what columns we have to play with
+  #all_observations_raw %>% str()
+  
+  #get columns and rename
+  all_observations <- all_observations_raw %>% 
+    select(id = id,
+           recorder = user_login,
+           species = scientific_name,
+           date = observed_on,
+           long = longitude,
+           lat = latitude,
+           quality_grade = quality_grade) %>%
+    mutate(species_level = F,date = as.Date(date)) %>%
+    filter(!is.na(long),!is.na(lat),!is.na(date)) #remove observations without locaton or date
+}
 
 all_observations$species_level[str_detect(all_observations$species, " ")] <- T
+
+```
+
+Load data from approach 2 (using iNat bulk data)
+
+```{r}
+country_code <- "ES"
+
+all_observations_raw <- readRDS(paste0("2_Generating_iNat_RM_Baseline/data/observations/by_country/observations_",country_code,".rds"))
+
+all_observations <- all_observations_raw %>% 
+    select(id = observation_uuid,
+           recorder = observer_id,
+           species = taxon_id,
+           date = observed_on,
+           long = longitude,
+           lat = latitude,
+           quality_grade = quality_grade) %>%
+    filter(!is.na(long),!is.na(lat),!is.na(date)) #remove observations without location or date
+
+```
+
+
+Get square km
+
+
+```{r}
+
+#get proj string from country code (temporary)
+get_proj_from_ISO <- function(ISO_A2 = "ES"){
+  "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"
+}
+
+
+proj_string <- get_proj_from_ISO(country_code)
 
 #quick look at the data
 #all_observations %>% str()
@@ -199,22 +242,25 @@ all_observations$species_level[str_detect(all_observations$species, " ")] <- T
 #option 1: 1km grid squares using spanish national grid
 
 # generate: km_sq by projecting to spanish national grid
-xy <- all_observations %>% select(long,lat)
 
-# firstly lets exclude non-spain records that have slipped through the gap
-spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
-                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
 
-all_observations$country <- coords2country(spdf) %>% as.character() # add coutnry clumn to dataframe
-all_observations <- all_observations %>% filter(country == "Spain",long>-10) # exclude non-spain records (and canary island records by filtering by longitude)
-
-#plot it to make sure it's all in spain
-plot(all_observations$long, all_observations$lat)
+if(F){
+  # firstly lets exclude non-spain records that have slipped through the gap
+  xy <- all_observations %>% select(long,lat)
+  spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
+                                 proj4string = CRS(proj_string))
+  
+  all_observations$country <- coords2country(spdf) %>% as.character() # add coutnry clumn to dataframe
+  all_observations <- all_observations %>% filter(country == "Spain",long>-10) # exclude non-spain records (and canary island records by filtering by longitude)
+  
+  #plot it to make sure it's all in spain
+  plot(all_observations$long, all_observations$lat)
+}
 
 #make into spatial data frame, convert to sf, transform to spanish grid, get coordinates and round to nearest 1000
 xy <- all_observations %>% select(long,lat)
 spdf <- SpatialPointsDataFrame(coords = xy, data = all_observations,
-                               proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+                               proj4string = CRS(proj_string))
 spdf_grids <- spdf %>% 
   st_as_sf() %>% 
   st_transform(spdf,crs = 2062) %>% 
@@ -223,6 +269,8 @@ spdf_grids <- spdf %>%
 
 #add the column to the data frame
 all_observations$km_sq <- paste0(spdf_grids[,1],",",spdf_grids[,2])
+
+saveRDS(all_observations,paste0("2_Generating_iNat_RM_Baseline/data/observations/by_country/observations_",country_code,"_processed.rds"))
 ```
 
 An alternative approach for creating 'sites' by clustering - doesn't work yet
