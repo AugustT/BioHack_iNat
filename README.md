@@ -21,6 +21,7 @@ Make a directory called `data_inat` in the main repo directory and use aws comma
 mkdir data_inat
 cd data_inat
 aws s3 cp s3://inaturalist-open-data/observations.csv.gz observations.csv.gz --no-sign-request
+aws s3 cp s3://inaturalist-open-data/taxa.csv.gz taxa.csv.gz --no-sign-request
 ```
 
 The `data_inat` directory is git ignored so will not be committed/pushed. This data is currently not used in the workflow.
