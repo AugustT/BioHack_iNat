@@ -13,7 +13,21 @@ rds_files <-
     full.names = TRUE
   )
 
-purrr::map(rds_files,
+already_present <-
+  list.files(
+    file.path(
+      "BioHack_iNat",
+      "Getting_Random_Observers",
+      "data",
+      "countrywise_subset_inat_data"
+    ),
+    pattern = "csv.gz$",
+    full.names = TRUE
+  ) %>% tools::file_path_sans_ext() %>% tools::file_path_sans_ext() %>% paste0(".rds")
+
+
+
+purrr::map(setdiff(rds_files,already_present),
            ~ data.table::fwrite(
              readRDS(.x),
              sprintf("%s.csv.gz", tools::file_path_sans_ext(.x))
