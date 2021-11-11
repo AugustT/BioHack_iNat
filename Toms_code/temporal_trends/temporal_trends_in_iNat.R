@@ -14,7 +14,7 @@ library(lubridate)
 library(stringr)
 
 # Load in the data ----
-data_raw <- readRDS(file = '2_Generating_iNat_RM_Baseline/data/observations/draft_data.rds')
+data_raw <- readRDS(file = '2_Generating_iNat_RM_Baseline/data/observations/by_country/observations_ES_processed.rds')
 
 # Explore the temporal variation ----
 ggplot(data_raw,
@@ -316,12 +316,23 @@ ggplot(data = data.covid.period) +
 
 
 
-# Calculate metrics for all users with min ~50 records in each period 
+# Calculate metrics for all users with min records in each period 
+country_var = "ESP" # iso_alpha_3
+
+data_raw = data_raw[order(data_raw$date), ]
+data_raw = setDT(data_raw)
+
+covid19.data = covid19(country = country_var, level = 1)
+covid19.data = setDT(covid19.data)
+
+covid19.data = covid19.data[order(covid19.data$date), ]
+
 plot(covid19.data$date, covid19.data$stay_home_restrictions)
 plot(covid19.data$date, covid19.data$workplace_closing)
 plot(covid19.data$date, covid19.data$transport_closing)
 
 lockdown_var = "workplace_closing"
+records_per_period = 10
 
 who = which(!is.na(covid19.data[[lockdown_var]]) & 
               covid19.data[[lockdown_var]] > 2)
@@ -329,46 +340,146 @@ who = which(!is.na(covid19.data[[lockdown_var]]) &
 lockdown.date <- as.Date(na.omit(covid19.data$date[covid19.data[[lockdown_var]] > 2]))
 
 data_lockdown <- data_raw[data_raw$date %in% lockdown.date,]
-data_control <- data_raw[data_raw$date %in% (lockdown.date-366),]
+data_control <- data_raw[data_raw$date %in% (lockdown.date - 366),]
 
 users_lockdown <- sort(table(data_lockdown$recorder))
-users_lockdown <- names(users_lockdown[users_lockdown>20])
+users_lockdown <- names(users_lockdown[users_lockdown > records_per_period])
 
 users_control <- sort(table(data_control$recorder))
-users_control <- names(users_control[users_control>20])
+users_control <- names(users_control[users_control > records_per_period])
 
 # users with at least 20 data points in both time periods
 users_of_interest <- users_lockdown[users_lockdown %in% users_control]
-
-
-
+length(users_of_interest)
 
 # Calculate the metrics ----
 
 # See how they changed
-area_user <- function(user, data){
-  spBehaviour <- spatialBehaviour(recorder_name = user, 
+spain_crs <- '+proj=lcc +lat_1=40 +lat_0=40 +lon_0=0 +k_0=0.9988085293 +x_0=600000 +y_0=600000 +a=6378298.3 +b=6356657.142669561 +pm=madrid +units=m +no_defs'
+
+metrics_user <- function(user, data, year = NULL){
+  
+  if(!is.null(data)){
+    
+    data <- data[year(data$date) == year, ]
+    
+  }
+  
+  rec.activity <- activityRatio(data = data,
+                                recorder_name = user,
+                                recorder_col = 'recorder',
+                                date_col = 'date',
+                                summer_days = NULL)
+  
+  rec.spatial <- spatialBehaviour(recorder_name = user, 
                                            data = data, 
                                            y_col = 'lat', 
                                            x_col = 'long',
                                            crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
                                            new_crs = spain_crs, 
                                            recorder_col = 'recorder')
-  spBehaviour$upper_area
+  
+  rec.weeklyDevotedDays <- weeklyDevotedDays(recorder_name = user,
+                                             data = data,
+                                             recorder_col = 'recorder',
+                                             date_col = 'date')
+  
+  rec.periodicity <- periodicity(recorder_name = user,
+                                 data = data,
+                                 date_col = 'date',
+                                 recorder_col = 'recorder',
+                                 day_limit = 10)
+  
+  out <- data.frame(recorder = user,
+                    activity_ratio = rec.activity$activity_ratio,
+                    active_days = rec.activity$active_days,
+                    median_weekly_devoted_days = rec.weeklyDevotedDays$median_weekly_devoted_days,
+                    periodicity = rec.periodicity$periodicity,
+                    periodicity_variation = rec.periodicity$periodicity_variation,
+                    upper_area = rec.spatial$upper_area,
+                    upper_n_poly = rec.spatial$upper_n_poly,
+                    ratio = rec.spatial$ratio)
 }
 
 # Get user areas for both time periods
-area_lockdown <- sapply(users_of_interest, FUN = area_user, data = data_lockdown)
-area_control <- sapply(users_of_interest, FUN = area_user, data = data_control)
+metrics_lockdown <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_lockdown))
+metrics_lockdown$status <- 'Lockdown'
+metrics_control <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_control))
+metrics_control$status <- 'Control'
 
-# Group these is one dataframe
-area_data <- data.frame(area = c(area_lockdown, area_control),
-                        status = c(rep('Lockdown', length(area_lockdown)),
-                                   rep('Control', length(area_control))))
+metrics_wide <- rbind(metrics_control, metrics_lockdown)
+
+metrics_long <- reshape2::melt(metrics_wide,
+                               id.vars = 'status',
+                               measure.vars = c("activity_ratio", "active_days",
+                                                "median_weekly_devoted_days", 
+                                                "periodicity", "periodicity_variation",
+                                                "upper_area", "upper_n_poly", 
+                                                "ratio"),
+                               variable.name = 'variable',
+                               value.name = 'value')
 
 # Create a simple box plot
-ggplot(area_data, aes(x = status, y = area)) + 
-  geom_boxplot()
+ggthemr::ggthemr('flat dark')
 
-summary(area_lockdown)
-summary(area_control)
+ggplot(metrics_long, aes(x = status, y = value, group = status)) + 
+  geom_boxplot(aes(fill = status)) +
+  facet_wrap(variable ~ ., scales = 'free', ncol = 3) +
+  theme(legend.position = "none")
+
+ggsave(filename = 'Toms_code/lockdown_impacts_spain.pdf')
+
+metrics_wide$statusIO <- metrics_wide$status == 'lockdown'
+m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
+          median_weekly_devoted_days + 
+          periodicity + periodicity_variation +
+          upper_area + upper_n_poly +
+          ratio, family = binomial, data = metrics_wide)
+
+summary(m1)
+
+# Do a temporal analysis across years ----
+# restrict to the time period where inat has a decent number of observations
+data_temp <- data_raw[year(data_raw$date) >= 2015]
+users_n_year <- tapply(year(data_temp$date), data_temp$recorder, FUN = function(x){length(unique(x))})
+sort(users_n_year, decreasing = TRUE)
+hist(users_n_year)
+
+users_5years <- names(users_n_year[users_n_year >5])
+
+# Set up file to store data
+unlink('Toms_code/temporal_trends/metrics_by_year.csv')
+
+for(i in users_5years){
+  
+  cat(paste('\nUser', i, '#', grep(i, users_5years), 'of', length(users_5years), '...'))
+  
+  for(j in 2015:2021){
+    
+    cat(paste(j, ' '))
+    
+    if(i %in% data_temp$recorder[year(data_temp$date) == j]){
+      
+      metrics_ji <- metrics_user(user = i,
+                                 data = data_temp,
+                                 year = j)
+      
+      metrics_ji$year <- j
+      
+      write.table(x = metrics_ji,
+                  file = 'Toms_code/temporal_trends/metrics_by_year.csv',
+                  sep = ',', 
+                  append = TRUE, 
+                  col.names = FALSE, 
+                  row.names = FALSE)
+    }
+    
+  }
+  
+}
+
+read.csv('Toms_code/temporal_trends/metrics_by_year.csv',
+         col.names = c("recorder", "activity_ratio", "active_days", "median_weekly_devoted_days", 
+                       "periodicity", "periodicity_variation", "upper_area", "upper_n_poly", 
+                       "ratio", "year"))
+
