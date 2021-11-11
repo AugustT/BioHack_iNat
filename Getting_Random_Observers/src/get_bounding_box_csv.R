@@ -21,4 +21,5 @@ bb_coord <- stringr::str_extract_all(bb_txt, pattern = "(?<=', \\().+(?=\\)\\))"
 # output file
 bind_cols(tibble(iso2c = cc_iso2c), bb_coord) %>%
   mutate(country_name = countrycode::countrycode(iso2c, origin = "iso2c", destination = "country.name")) %>%
+  mutate(continent = countrycode::countrycode(iso2c, origin ="iso2c", destination = "continent")) %>% 
   data.table::fwrite("BioHack_iNat/Getting_Random_Observers/data/bounding_boxes.csv")
