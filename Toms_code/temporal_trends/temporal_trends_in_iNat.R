@@ -408,6 +408,9 @@ metrics_control <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, 
 metrics_control$status <- 'Control'
 
 metrics_wide <- rbind(metrics_control, metrics_lockdown)
+write.csv(metrics_wide,
+          file = 'Toms_code/temporal_trends/metrics_ES.csv', 
+          row.names = FALSE)
 
 metrics_long <- reshape2::melt(metrics_wide,
                                id.vars = 'status',
@@ -427,9 +430,9 @@ ggplot(metrics_long, aes(x = status, y = value, group = status)) +
   facet_wrap(variable ~ ., scales = 'free', ncol = 3) +
   theme(legend.position = "none")
 
-ggsave(filename = 'Toms_code/lockdown_impacts_spain.pdf')
+ggsave(filename = 'Toms_code/lockdown_impacts_spain.png')
 
-metrics_wide$statusIO <- metrics_wide$status == 'lockdown'
+metrics_wide$statusIO <- metrics_wide$status == 'Lockdown'
 m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
           median_weekly_devoted_days + 
           periodicity + periodicity_variation +
@@ -437,6 +440,7 @@ m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
           ratio, family = binomial, data = metrics_wide)
 
 summary(m1)
+write.csv(summary(m1)['coefficients'],file='Toms_code/temporal_trends/model_ES.csv')
 
 # UK metrics ----
 country_var = "GB" # iso_alpha_3
@@ -489,6 +493,9 @@ metrics_control <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, 
 metrics_control$status <- 'Control'
 
 metrics_wide <- rbind(metrics_control, metrics_lockdown)
+write.csv(metrics_wide,
+          file = 'Toms_code/temporal_trends/metrics_UK.csv', 
+          row.names = FALSE)
 
 metrics_long <- reshape2::melt(metrics_wide,
                                id.vars = 'status',
@@ -508,7 +515,7 @@ ggplot(metrics_long, aes(x = status, y = value, group = status)) +
   facet_wrap(variable ~ ., scales = 'free', ncol = 3) +
   theme(legend.position = "none")
 
-ggsave(filename = 'Toms_code/lockdown_impacts_UK.pdf')
+ggsave(filename = 'Toms_code/lockdown_impacts_UK.png')
 
 metrics_wide$statusIO <- metrics_wide$status == 'Lockdown'
 m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
@@ -518,6 +525,7 @@ m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
             ratio, family = binomial, data = metrics_wide)
 
 summary(m1)
+write.csv(summary(m1)['coefficients'],file='Toms_code/temporal_trends/model_UK.csv')
 
 
 # Do a temporal analysis across years ----
