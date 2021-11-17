@@ -1,0 +1,3 @@
+"","coefficients.Estimate","coefficients.Std..Error","coefficients.z.value","coefficients.Pr...z.."
+"(Intercept)",-126.147779364858,305975.065354587,-0.000412281240037219,0.999671047173185
+"activity_ratio",205.163421682815,489167.229646817,0.000419413667246157,0.999665356320126
