@@ -357,9 +357,9 @@ length(users_of_interest)
 # See how they changed
 spain_crs <- '+proj=lcc +lat_1=40 +lat_0=40 +lon_0=0 +k_0=0.9988085293 +x_0=600000 +y_0=600000 +a=6378298.3 +b=6356657.142669561 +pm=madrid +units=m +no_defs'
 
-metrics_user <- function(user, data, year = NULL){
+metrics_user <- function(user, data, year = NULL, new_crs){
   
-  if(!is.null(data)){
+  if(!is.null(year)){
     
     data <- data[year(data$date) == year, ]
     
@@ -376,7 +376,7 @@ metrics_user <- function(user, data, year = NULL){
                                            y_col = 'lat', 
                                            x_col = 'long',
                                            crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
-                                           new_crs = spain_crs, 
+                                           new_crs = new_crs, 
                                            recorder_col = 'recorder')
   
   rec.weeklyDevotedDays <- weeklyDevotedDays(recorder_name = user,
@@ -402,12 +402,15 @@ metrics_user <- function(user, data, year = NULL){
 }
 
 # Get user areas for both time periods
-metrics_lockdown <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_lockdown))
+metrics_lockdown <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_lockdown, new_crs = spain_crs))
 metrics_lockdown$status <- 'Lockdown'
-metrics_control <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_control))
+metrics_control <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_control, new_crs = spain_crs))
 metrics_control$status <- 'Control'
 
 metrics_wide <- rbind(metrics_control, metrics_lockdown)
+write.csv(metrics_wide,
+          file = 'Toms_code/temporal_trends/metrics_ES.csv', 
+          row.names = FALSE)
 
 metrics_long <- reshape2::melt(metrics_wide,
                                id.vars = 'status',
@@ -427,9 +430,9 @@ ggplot(metrics_long, aes(x = status, y = value, group = status)) +
   facet_wrap(variable ~ ., scales = 'free', ncol = 3) +
   theme(legend.position = "none")
 
-ggsave(filename = 'Toms_code/lockdown_impacts_spain.pdf')
+ggsave(filename = 'Toms_code/lockdown_impacts_spain.png')
 
-metrics_wide$statusIO <- metrics_wide$status == 'lockdown'
+metrics_wide$statusIO <- metrics_wide$status == 'Lockdown'
 m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
           median_weekly_devoted_days + 
           periodicity + periodicity_variation +
@@ -437,6 +440,93 @@ m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
           ratio, family = binomial, data = metrics_wide)
 
 summary(m1)
+write.csv(summary(m1)['coefficients'],file='Toms_code/temporal_trends/model_ES.csv')
+
+# UK metrics ----
+country_var = "GB" # iso_alpha_3
+
+data_uk <- readRDS('Toms_code/temporal_trends/UK_inat.rds')
+data_uk$date <- as.Date(data_uk$observed_on)
+names(data_uk) <- c("observation_uuid", "recorder", "lat", "long", 
+                    "positional_accuracy", "taxon_id", "quality_grade",
+                    "observed_on", 'date')
+data_uk <- data_uk[, c("recorder", "lat", "long", "taxon_id", 'date')]
+data_uk = data_uk[order(data_uk$date), ]
+data_uk = setDT(data_uk)
+
+covid19.data = covid19(country = country_var, level = 1)
+covid19.data = setDT(covid19.data)
+
+covid19.data = covid19.data[order(covid19.data$date), ]
+
+# plot(covid19.data$date, covid19.data$stay_home_restrictions)
+# plot(covid19.data$date, covid19.data$workplace_closing)
+# plot(covid19.data$date, covid19.data$transport_closing)
+
+lockdown_var = "workplace_closing"
+records_per_period = 10
+
+who = which(!is.na(covid19.data[[lockdown_var]]) & 
+              covid19.data[[lockdown_var]] > 2)
+
+lockdown.date <- as.Date(na.omit(covid19.data$date[covid19.data[[lockdown_var]] > 2]))
+
+data_lockdown <- data_uk[data_uk$date %in% lockdown.date,]
+data_control <- data_uk[data_uk$date %in% (lockdown.date - 366),]
+
+users_lockdown <- sort(table(data_lockdown$recorder))
+users_lockdown <- names(users_lockdown[users_lockdown > records_per_period])
+
+users_control <- sort(table(data_control$recorder))
+users_control <- names(users_control[users_control > records_per_period])
+
+# users with at least 20 data points in both time periods
+users_of_interest <- as.numeric(users_lockdown[users_lockdown %in% users_control])
+length(users_of_interest)
+
+uk_crs <- "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs"
+
+# Get user areas for both time periods
+metrics_lockdown <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_lockdown, new_crs = uk_crs))
+metrics_lockdown$status <- 'Lockdown'
+metrics_control <- do.call(rbind, lapply(users_of_interest, FUN = metrics_user, data = data_control, new_crs = uk_crs))
+metrics_control$status <- 'Control'
+
+metrics_wide <- rbind(metrics_control, metrics_lockdown)
+write.csv(metrics_wide,
+          file = 'Toms_code/temporal_trends/metrics_UK.csv', 
+          row.names = FALSE)
+
+metrics_long <- reshape2::melt(metrics_wide,
+                               id.vars = 'status',
+                               measure.vars = c("activity_ratio", "active_days",
+                                                "median_weekly_devoted_days", 
+                                                "periodicity", "periodicity_variation",
+                                                "upper_area", "upper_n_poly", 
+                                                "ratio"),
+                               variable.name = 'variable',
+                               value.name = 'value')
+
+# Create a simple box plot
+ggthemr::ggthemr('flat dark')
+
+ggplot(metrics_long, aes(x = status, y = value, group = status)) + 
+  geom_boxplot(aes(fill = status)) +
+  facet_wrap(variable ~ ., scales = 'free', ncol = 3) +
+  theme(legend.position = "none")
+
+ggsave(filename = 'Toms_code/lockdown_impacts_UK.png')
+
+metrics_wide$statusIO <- metrics_wide$status == 'Lockdown'
+m1 <- glm(formula = statusIO ~ activity_ratio + active_days +
+            median_weekly_devoted_days + 
+            periodicity + periodicity_variation +
+            upper_area + upper_n_poly +
+            ratio, family = binomial, data = metrics_wide)
+
+summary(m1)
+write.csv(summary(m1)['coefficients'],file='Toms_code/temporal_trends/model_UK.csv')
+
 
 # Do a temporal analysis across years ----
 # restrict to the time period where inat has a decent number of observations
