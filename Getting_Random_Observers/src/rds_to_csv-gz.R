@@ -7,7 +7,8 @@ rds_files <-
       "BioHack_iNat",
       "Getting_Random_Observers",
       "data",
-      "countrywise_subset_inat_data"
+      "countrywise_subset_inat_data",
+      "afr"
     ),
     pattern = "rds$",
     full.names = TRUE
@@ -19,7 +20,8 @@ already_present <-
       "BioHack_iNat",
       "Getting_Random_Observers",
       "data",
-      "countrywise_subset_inat_data"
+      "countrywise_subset_inat_data",
+      "afr"
     ),
     pattern = "csv.gz$",
     full.names = TRUE
